@@ -3,9 +3,9 @@ import { Client, Databases, ID, Query } from "react-native-appwrite";
 const DATABASE_ID = process.env.EXPO_PUBLIC_APPWRITE_DATABASE_ID!;
 const COLLECTION_ID = process.env.EXPO_PUBLIC_APPWRITE_COLLECTION_ID!;
 
-export const client = new Client()
-  .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!)
-  .setEndpoint("https://sgp.cloud.appwrite.io/v1");
+const client = new Client()
+  .setEndpoint("https://sgp.cloud.appwrite.io/v1")
+  .setProject(process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID!);
 
 const database = new Databases(client);
 
@@ -44,12 +44,31 @@ export const getTrendingMovies = async (): Promise<
   TrendingMovie[] | undefined
 > => {
   try {
+    // Fetch more documents to ensure we have enough unique movies
     const result = await database.listDocuments(DATABASE_ID, COLLECTION_ID, [
-      Query.limit(5),
+      Query.limit(50),
       Query.orderDesc("count"),
     ]);
 
-    return result.documents as unknown as TrendingMovie[];
+    const documents = result.documents as unknown as TrendingMovie[];
+
+    // Process to ensure uniqueness by movie_id, keeping the one with highest count
+    const uniqueMoviesMap = new Map<number, TrendingMovie>();
+
+    for (const movie of documents) {
+      const existingMovie = uniqueMoviesMap.get(movie.movie_id);
+
+      if (!existingMovie || movie.count > existingMovie.count) {
+        uniqueMoviesMap.set(movie.movie_id, movie);
+      }
+    }
+
+    // Convert map to array, sort by count descending, and limit to 5
+    const uniqueMovies = Array.from(uniqueMoviesMap.values())
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 5);
+
+    return uniqueMovies;
   } catch (error) {
     console.error(error);
     return undefined;
